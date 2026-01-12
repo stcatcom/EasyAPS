@@ -49,13 +49,11 @@ grep -q "@audio.*memlock" /etc/security/limits.conf || echo "@audio - memlock un
 
 # 設定を確認
 cat /etc/security/limits.conf
-
+```
 表示されるテキストの最後に
 @audio - rtprio 95
 @audio - memlock unlimited
 の表示があることを確認して下さい。
-
-```
 
 ### 3. ユーザーをオーディオグループに追加
 
