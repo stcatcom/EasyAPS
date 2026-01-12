@@ -50,10 +50,6 @@ grep -q "@audio.*memlock" /etc/security/limits.conf || echo "@audio - memlock un
 # 設定を確認
 cat /etc/security/limits.conf
 ```
-表示されるテキストの最後に
-@audio - rtprio 95
-@audio - memlock unlimited
-の表示があることを確認して下さい。
 
 ### 3. ユーザーをオーディオグループに追加
 
@@ -66,10 +62,6 @@ grep -q "session required pam_limits.so" /etc/pam.d/common-session || echo 'sess
 
 # 設定を確認
 cat /etc/pam.d/common-session
-
-表示されるテキストの最後に
-session required pam_limits.so
-の表示があることを確認して下さい。
 ```
 
 **重要**: ここまでの設定後、設定を有効にするために再起動してください。
