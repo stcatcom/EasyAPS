@@ -5,6 +5,7 @@
 ## 目次
 
 - [前提条件の確認](#前提条件の確認)
+- [リポジトリのクローン](#リポジトリのクローン)
 - [JACK Audioのインストール](#jack-audioのインストール)
 - [Audaciousのインストール](#audaciousのインストール)
 - [Samba共有の設定](#samba共有の設定オプション)
@@ -17,7 +18,6 @@
 ### ユーザー確認
 
 rootユーザーではなく、一般ユーザーで作業を行います。
-
 ```bash
 # 現在のユーザーを確認
 USER=$(whoami)
@@ -27,10 +27,23 @@ echo $USER
 sudo apt update && sudo apt upgrade -y
 ```
 
+## リポジトリのクローン
+```bash
+cd ~
+git clone https://github.com/stcatcom/easyaps.git
+```
+
+または、直接ダウンロード：
+```bash
+cd ~
+mkdir -p easyaps
+cd easyaps
+wget https://raw.githubusercontent.com/stcatcom/easyaps/main/easyaps.py
+```
+
 ## JACK Audioのインストール
 
 ### 1. JACK Audio Connection Kitのインストール
-
 ```bash
 sudo apt install jackd2 -y
 ```
@@ -38,7 +51,6 @@ sudo apt install jackd2 -y
 **注意**: インストール時に「リアルタイム実行優先度の設定を有効にしますか?」と聞かれたら「はい」を選択してください。
 
 ### 2. リアルタイムスケジューリング権限の設定
-
 ```bash
 # 既存の設定をバックアップ
 sudo cp /etc/security/limits.conf /etc/security/limits.conf.bak
@@ -52,7 +64,6 @@ cat /etc/security/limits.conf
 ```
 
 ### 3. ユーザーをオーディオグループに追加
-
 ```bash
 # audio, render, videoグループにユーザーを追加
 sudo usermod -a -G render,video,audio $USER
@@ -67,7 +78,6 @@ cat /etc/pam.d/common-session
 **重要**: ここまでの設定後、設定を有効にするために再起動してください。
 
 ### 4. オーディオデバイスの確認
-
 ```bash
 # 再生デバイスの確認
 aplay -l
@@ -86,7 +96,6 @@ card 2: A96 [AudioBox USB 96], device 0: USB Audio [USB Audio]
 この場合、デバイス名は `hw:A96` または `hw:2` となります。
 
 ### 5. JACK Audioの自動起動設定
-
 ```bash
 # loginctlでユーザーセッションの永続化を有効化
 loginctl enable-linger $USER
@@ -95,7 +104,7 @@ loginctl show-user $USER | grep Linger
 # systemdユーザーサービスディレクトリを作成
 mkdir -p /home/$USER/.config/systemd/user
 
-# JACKサービスファイルを作成（hw:A96は実際のデバイス名に変更）
+# JACKサービスファイルを作成(hw:A96は実際のデバイス名に変更)
 cat << EOF > /home/$USER/.config/systemd/user/jackd.service
 [Unit]
 Description=Start JACK Server
@@ -124,7 +133,6 @@ systemctl --user status jackd
 ```
 
 ### 6. JACK接続の確認
-
 ```bash
 # JACKポートの一覧表示
 jack_lsp
@@ -138,13 +146,11 @@ jack_lsp -c
 ## Audaciousのインストール
 
 ### 1. Audaciousのインストール
-
 ```bash
 sudo apt install -y audacious
 ```
 
 ### 2. Audaciousの自動起動設定
-
 ```bash
 # Audaciousサービスファイルを作成
 cat << EOF > /home/$USER/.config/systemd/user/audacious.service
@@ -177,7 +183,7 @@ systemctl --user status audacious
 
 **注意**: `Environment=DISPLAY=:0` は環境によって変更が必要な場合があります。
 
-### 3. Audaciousの設定（GUI）
+### 3. Audaciousの設定(GUI)
 
 起動に成功すると、GUI側にAudaciousが起動します。
 
@@ -189,24 +195,21 @@ systemctl --user status audacious
    - **サンプルレート**: `48000 Hz`
 5. 設定を保存して閉じる
 
-## Samba共有の設定（オプション）
+## Samba共有の設定(オプション)
 
 ネットワーク経由でCSVやメディアファイルを管理できるようにします。
 
 ### 1. データディレクトリの作成
-
 ```bash
 mkdir -p ~/easyaps/data/{csv,contents}
 ```
 
 ### 2. Sambaのインストール
-
 ```bash
 sudo apt install samba -y
 ```
 
 ### 3. Samba設定ファイルの作成
-
 ```bash
 # 既存の設定をバックアップ
 sudo cp /etc/samba/smb.conf /etc/samba/smb.conf.bak
@@ -230,14 +233,12 @@ EOF
 ```
 
 ### 4. Sambaユーザーの追加
-
 ```bash
 # Sambaユーザーを追加
 sudo smbpasswd -a $USER
 ```
 
-プロンプトに従ってパスワードを設定します（シェルログインパスワードとは別のものを推奨）。
-
+プロンプトに従ってパスワードを設定します(シェルログインパスワードとは別のものを推奨)。
 ```
 New SMB password: [パスワードを入力]
 Retype new SMB password: [パスワードを再入力]
@@ -245,7 +246,6 @@ Added user [ユーザー名].
 ```
 
 ### 5. Sambaサービスの有効化
-
 ```bash
 # Sambaサービスの有効化と起動
 sudo systemctl enable --now smbd
@@ -256,35 +256,17 @@ sudo systemctl status smbd
 
 ### 6. 接続確認
 
-LAN内の別のPCから、このPCの共有フォルダ（`\\[IPアドレス]\easyaps`）にアクセスできることを確認してください。
+LAN内の別のPCから、このPCの共有フォルダ(`\\[IPアドレス]\easyaps`)にアクセスできることを確認してください。
 特に、ファイルの追加・削除ができるかを確認しておくことを推奨します。
 
 ## EasyAPS本体のインストール
 
-### 1. リポジトリのクローン
-
-```bash
-cd ~
-git clone https://github.com/stcatcom/easyaps.git
-```
-
-または、直接ダウンロード：
-
-```bash
-cd ~
-mkdir -p easyaps
-cd easyaps
-wget https://raw.githubusercontent.com/stcatcom/easyaps/main/easyaps.py
-```
-
-### 2. 実行権限の付与
-
+### 1. 実行権限の付与
 ```bash
 chmod 755 ~/easyaps/easyaps.py
 ```
 
-### 3. 起動確認
-
+### 2. 起動確認
 ```bash
 # ヘルプ表示
 ~/easyaps/easyaps.py --help
@@ -297,8 +279,7 @@ chmod 755 ~/easyaps/easyaps.py
 
 システム起動時にEasyAPSを自動起動する設定です。
 
-### 通常のLinux（Linux Mint, GNOME等）の場合
-
+### 通常のLinux(Linux Mint, GNOME等)の場合
 ```bash
 mkdir -p ~/.config/autostart
 
@@ -312,7 +293,6 @@ EOF
 ```
 
 ### Raspberry Piの場合
-
 ```bash
 mkdir -p ~/.config/autostart
 
@@ -328,7 +308,6 @@ EOF
 ### 自動起動の確認
 
 再起動して、EasyAPSが自動的に起動することを確認してください。
-
 ```bash
 sudo reboot
 ```
@@ -336,7 +315,6 @@ sudo reboot
 ## トラブルシューティング
 
 ### ファイルが見つからない
-
 ```
 ファイルが見つかりません: /home/user/easyaps/data/contents/FILENAME.mp3/.m4a
 ダミーファイルで代替: /home/user/easyaps/data/contents/dummy.m4a
@@ -346,7 +324,7 @@ sudo reboot
 1. **ファイル名の不一致**: CSVファイルに記載されたファイル名と実際のファイル名が一致しているか確認
 2. **ファイルの不在**: `~/easyaps/data/contents/` 配下にファイルが存在するか確認
 3. **拡張子の問題**: ファイルの拡張子が `.mp3` または `.m4a` であることを確認
-4. **大文字小文字**: Linuxはファイル名の大文字小文字を区別します（例: `MORNING01.mp3` と `morning01.mp3` は別ファイル）
+4. **大文字小文字**: Linuxはファイル名の大文字小文字を区別します(例: `MORNING01.mp3` と `morning01.mp3` は別ファイル)
 5. **シンボリックリンク**: Samba共有を使用している場合、シンボリックリンクが正しく設定されているか確認
 
 **注意**: `dummy.m4a` が存在しない場合、自動的に無音で継続されます。
@@ -354,7 +332,6 @@ sudo reboot
 ### JACK接続エラー
 
 #### JACKサービスが起動しない
-
 ```bash
 # JACKサービスの状態確認
 systemctl --user status jackd
@@ -368,11 +345,10 @@ systemctl --user restart jackd
 
 **よくある原因**:
 - オーディオデバイスが接続されていない
-- デバイス名（`hw:A96`など）が間違っている
+- デバイス名(`hw:A96`など)が間違っている
 - 他のアプリケーションがオーディオデバイスを使用している
 
 #### JACK接続が確立されない
-
 ```bash
 # JACK接続の確認
 jack_lsp -c
@@ -383,7 +359,6 @@ jack_connect system:capture_2 system:playback_2
 ```
 
 ### Audaciousが起動しない
-
 ```bash
 # Audaciousサービスの状態確認
 systemctl --user status audacious
@@ -399,17 +374,17 @@ systemctl --user restart audacious
 ```
 
 **よくある原因**:
-- `DISPLAY` 環境変数が間違っている（デフォルトは `:0`）
+- `DISPLAY` 環境変数が間違っている(デフォルトは `:0`)
 - JACKサービスが起動していない
 - X11/Waylandセッションの問題
 
 ### CSVファイルが読み込まれない
 
 **確認事項**:
-1. **ファイル名**: `YYMMDD.csv` 形式になっているか（例: `260112.csv`）
+1. **ファイル名**: `YYMMDD.csv` 形式になっているか(例: `260112.csv`)
 2. **配置場所**: `~/easyaps/data/csv/` ディレクトリに配置されているか
 3. **エンコーディング**: ファイルのエンコーディングが `UTF-8` であることを確認
-4. **CSV形式**: カンマ区切りで、カラムが4つ（time, source, mix, filename）あることを確認
+4. **CSV形式**: カンマ区切りで、カラムが4つ(time, source, mix, filename)あることを確認
 5. **ヘッダー行**: 1行目がヘッダーの場合、`time,source,mix,filename` になっているか確認
 
 **CSVファイルの例**:
@@ -422,7 +397,6 @@ time,source,mix,filename
 ### 音が出ない
 
 #### JACK接続の確認
-
 ```bash
 # JACK接続状態を確認
 jack_lsp -c
@@ -441,7 +415,6 @@ jack_lsp -c
 3. 出力プラグインが `JACK Output Plugin` になっているか確認
 
 #### オーディオデバイスの確認
-
 ```bash
 # オーディオデバイスが認識されているか確認
 aplay -l
@@ -452,7 +425,6 @@ systemctl --user status jackd
 ```
 
 ### システム再起動後にJACKが起動しない
-
 ```bash
 # loginctlの設定確認
 loginctl show-user $USER | grep Linger
@@ -466,7 +438,6 @@ systemctl --user status audacious
 ```
 
 ### パーミッションエラー
-
 ```bash
 # オーディオグループに所属しているか確認
 groups $USER
@@ -479,18 +450,18 @@ sudo usermod -a -G render,video,audio $USER
 
 ### その他の問題
 
-問題が解決しない場合は、以下の情報を添えてIssueを作成してください：
+問題が解決しない場合は、以下の情報を添えてIssueを作成してください:
 
 1. 使用しているOSとバージョン
 2. オーディオインターフェースのモデル
 3. エラーメッセージ全文
 4. 以下のコマンドの出力結果:
-   ```bash
+```bash
    systemctl --user status jackd
    systemctl --user status audacious
    jack_lsp -c
    ~/easyaps/easyaps.py --version
-   ```
+```
 
 ## 参考リンク
 
