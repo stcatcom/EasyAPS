@@ -16,7 +16,7 @@ Author: Masaya Miyazaki
 Organization: Office Stray Cat
 Website: https://stcat.com/
 Email: info@stcat.com
-GitHub: https://github.com/stcatcom/RadioArchiver
+GitHub: https://github.com/stcatcom/EasyAPS
 Version: 0.0.3
 """
 import csv
