@@ -22,6 +22,7 @@ EasyAPS は、ラジオ放送局向けの自動番組スケジューラーです
 **オーディオインターフェース:**
 - **PreSonus AudioBox USB 96**
 - **ARTURIA MiniFuse 2**
+- **ESI U24XL**
 
 
 ### 必須要件
