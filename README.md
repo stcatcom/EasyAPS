@@ -198,7 +198,7 @@ Copyright (c) 2026 Masaya Miyazaki / Office Stray Cat
 - コンソール出力
 - Pythonの標準エラー出力
 
-バグ報告や機能要望は [GitHub Issues](https://github.com/stcatcom/RadioArchiver/issues) までお願いします。
+バグ報告や機能要望は [GitHub Issues](https://github.com/stcatcom/EasyAPS/issues) までお願いします。
 
 このプロジェクトが役に立った場合は、開発費の支援をご検討ください：
 
