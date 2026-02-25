@@ -211,6 +211,7 @@ Copyright (c) 2026 Masaya Miyazaki / Office Stray Cat
 プルリクエストも歓迎します。
 
 このプロジェクトが役に立った場合は、開発費の支援をご検討ください：
+
 [![PayPal](https://img.shields.io/badge/PayPal-Donate-blue.svg)](https://paypal.me/stcatcom?locale.x=ja_JP&country.x=JP)
 
 ## 謝辞
