@@ -192,6 +192,18 @@ Copyright (c) 2026 Masaya Miyazaki / Office Stray Cat
 
 **注意**: このソフトウェアを改変・派生する際は、著作権表示を削除しないでください。
 
+## サポート
+
+問題が発生した場合は、ログファイルを確認してください：
+- コンソール出力
+- Pythonの標準エラー出力
+
+バグ報告や機能要望は [GitHub Issues](https://github.com/stcatcom/RadioArchiver/issues) までお願いします。
+
+このプロジェクトが役に立った場合は、開発費の支援をご検討ください：
+
+[![PayPal](https://img.shields.io/badge/PayPal-Donate-blue.svg)](https://paypal.me/stcatcom?locale.x=ja_JP&country.x=JP)
+
 ## 作者
 
 - **Masaya Miyazaki** / Office Stray Cat
