@@ -192,6 +192,7 @@ systemctl --user status audacious
 3. `オーディオ` タブを選択
 4. 以下を設定:
    - **出力プラグイン**: `JACK Output Plugin`
+   - **バッファーサイズ**:`100ms`
    - **サンプルレート**: `48000 Hz`
 5. 設定を保存して閉じる
 
