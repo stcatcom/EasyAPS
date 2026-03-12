@@ -17,8 +17,9 @@ Organization: Office Stray Cat
 Website: https://stcat.com/
 Email: info@stcat.com
 GitHub: https://github.com/stcatcom/EasyAPS
-Version: 0.0.3
+Version: 0.04
 """
+import configparser
 import csv
 import os
 import subprocess
@@ -27,7 +28,7 @@ import threading
 from datetime import datetime, timedelta
 
 # バージョン情報
-version = "free-0.03"
+version = "free-0.04"
 
 class MusicScheduler:
     def __init__(self, day_end_hour=4):
@@ -62,7 +63,39 @@ class MusicScheduler:
         # JACK制御の状態管理を追加
         self.previous_studio_mode = None
         self.jack_connection_active = False
-        
+
+        # device.conf からオーディオルーティング設定を読み込み
+        self._load_device_config()
+
+    def _load_device_config(self):
+        """device.conf からオーディオルーティング設定を読み込む（なければデフォルト値を使用）"""
+        defaults = {
+            'capture_l':  'system:capture_1',
+            'capture_r':  'system:capture_2',
+            'playback_l': 'system:playback_1',
+            'playback_r': 'system:playback_2',
+        }
+        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'device.conf')
+        config = configparser.ConfigParser()
+
+        if os.path.exists(config_path):
+            config.read(config_path, encoding='utf-8')
+            section = 'AUDIO_ROUTING'
+            if config.has_section(section):
+                self.capture_l  = config.get(section, 'capture_l',  fallback=defaults['capture_l'])
+                self.capture_r  = config.get(section, 'capture_r',  fallback=defaults['capture_r'])
+                self.playback_l = config.get(section, 'playback_l', fallback=defaults['playback_l'])
+                self.playback_r = config.get(section, 'playback_r', fallback=defaults['playback_r'])
+                print(f"デバイス設定を読み込みました: {config_path}")
+            else:
+                print(f"警告: device.conf に [AUDIO_ROUTING] セクションがありません。デフォルト値を使用します。")
+                self.capture_l, self.capture_r = defaults['capture_l'], defaults['capture_r']
+                self.playback_l, self.playback_r = defaults['playback_l'], defaults['playback_r']
+        else:
+            print(f"device.conf が見つかりません。デフォルト値を使用します。")
+            self.capture_l, self.capture_r = defaults['capture_l'], defaults['capture_r']
+            self.playback_l, self.playback_r = defaults['playback_l'], defaults['playback_r']
+
     def format_time_display(self, seconds):
         """秒数を MM:SS 形式にフォーマット"""
         if seconds < 0:
@@ -135,9 +168,9 @@ class MusicScheduler:
                     else:
                         # 接続先の行（インデント有り）
                         connected_to = line
-                        if current_port == "system:capture_1" and connected_to == "system:playback_1":
+                        if current_port == self.capture_l and connected_to == self.playback_l:
                             capture1_to_playback1 = True
-                        elif current_port == "system:capture_2" and connected_to == "system:playback_2":
+                        elif current_port == self.capture_r and connected_to == self.playback_r:
                             capture2_to_playback2 = True
                 
                 is_connected = capture1_to_playback1 and capture2_to_playback2
@@ -150,13 +183,13 @@ class MusicScheduler:
         """JACKでスタジオ接続を確立（シンプル版）"""
         try:
             print("\nスタジオモード: JACK接続を確立中...")
-            
-            # 接続1: system:capture_1 -> system:playback_1
-            subprocess.run(["jack_connect", "system:capture_1", "system:playback_1"], 
+
+            # 接続1: capture_l -> playback_l
+            subprocess.run(["jack_connect", self.capture_l, self.playback_l],
                          capture_output=True, text=True, timeout=5)
-            
-            # 接続2: system:capture_2 -> system:playback_2
-            subprocess.run(["jack_connect", "system:capture_2", "system:playback_2"], 
+
+            # 接続2: capture_r -> playback_r
+            subprocess.run(["jack_connect", self.capture_r, self.playback_r],
                          capture_output=True, text=True, timeout=5)
             
             print("JACK接続確立完了")
@@ -171,13 +204,13 @@ class MusicScheduler:
         """JACKのスタジオ接続を切断（無条件実行版）"""
         try:
             print("\nJACK接続を切断中...")
-            
-            # 切断1: system:capture_1 -> system:playback_1
-            subprocess.run(["jack_disconnect", "system:capture_1", "system:playback_1"], 
+
+            # 切断1: capture_l -> playback_l
+            subprocess.run(["jack_disconnect", self.capture_l, self.playback_l],
                          capture_output=True, text=True, timeout=5)
-            
-            # 切断2: system:capture_2 -> system:playback_2
-            subprocess.run(["jack_disconnect", "system:capture_2", "system:playback_2"], 
+
+            # 切断2: capture_r -> playback_r
+            subprocess.run(["jack_disconnect", self.capture_r, self.playback_r],
                          capture_output=True, text=True, timeout=5)
             
             print("JACK接続切断完了")
@@ -285,7 +318,7 @@ class MusicScheduler:
                 
                 # 同一行に上書き表示
                 if status_line:
-                    print(f"\r{status_line}                    ", end="", flush=True)
+                    print(f"\r{status_line}                      ", end="", flush=True)
                 
                 time.sleep(1)  # 1秒ごとに更新
                 
@@ -594,7 +627,13 @@ class MusicScheduler:
         """CSVファイルを読み込み、レコードを処理"""
         csv_path = self.get_today_csv_path()
         broadcast_date = self.get_broadcast_date()
-        
+
+        # 日替わり時にフラグをリセット
+        self.next_day_loaded = False
+        self.next_day_loading = False
+        self.next_day_check_started = False
+        self.current_record_index = 0
+
         # 今日分のCSVが存在しない場合は待機
         if not os.path.exists(csv_path):
             print(f"\n本日分のCSVファイルが見つかりません: {csv_path}")

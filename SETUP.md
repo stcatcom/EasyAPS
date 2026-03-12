@@ -1,6 +1,9 @@
-# EasyAPS セットアップガイド
+# EasyAPS セットアップガイド（JACK環境向け）
 
-このドキュメントでは、EasyAPSの詳細なセットアップ手順を説明します。
+EasyAPSはJACK APIを使用するため、PipeWire環境でも**pipewire-jack互換層**を通じて動作します。
+device.confでport名を設定することで、JACK/PipeWire双方に対応します。
+
+このドキュメントでは、JACKで動作する環境における、EasyAPSの詳細なセットアップ手順を説明します。
 
 ## 目次
 
@@ -305,6 +308,25 @@ Exec=lxterminal --title=EasyAPS -e "python3 $HOME/easyaps/easyaps.py"
 Terminal=false
 EOF
 ```
+
+### Kubuntuの場合
+```bash
+mkdir -p ~/.config/autostart
+
+cat << EOF > ~/.config/autostart/easyaps.desktop
+[Desktop Entry]
+Type=Application
+Name=EasyAPS
+Comment=EasyAPS Automatic Broadcast Scheduler
+Exec=konsole --hold -e python3 easyaps/easyaps.py
+Icon=utilities-terminal
+Terminal=false
+Categories=AudioVideo;Audio;
+EOF
+
+chmod 755 ~/.config/autostart/easyaps.desktop
+```
+
 
 ### 自動起動の確認
 

@@ -17,6 +17,8 @@ EasyAPS は、ラジオ放送局向けの自動番組スケジューラーです
 
 **オペレーティングシステム:**
 - **Linux Mint 22.2** (Cinnamon Edition)
+- **Lubuntu 24.04.4 LTS** (LXQt)
+- **Kubuntu 24.04 LTS** (Plasma 5)
 - **Raspberry Pi OS** (64bit - Raspberry Pi 5)
 
 **オーディオインターフェース:**
@@ -30,7 +32,7 @@ EasyAPS は、ラジオ放送局向けの自動番組スケジューラーです
 - **OS**: Linux (Ubuntu, Raspberry Pi OS等)
 - **Python**: 3.7以上
 - **必須パッケージ**:
-  - `jackd2` - JACK Audio Connection Kit
+  - `jackd2` - JACK Audio Connection Kit(PipeWire環境でも必要)
   - `audacious` - 音楽プレイヤー
   - `samba` - ネットワーク共有（オプション）
 
@@ -71,7 +73,7 @@ mkdir -p ~/easyaps/data/{csv,contents}
 
 #### 方法2: 自動起動（.desktop使用）
 
-自動起動の詳細な設定方法は [SETUP.md](SETUP.md) を参照してください。
+自動起動の詳細な設定方法は [SETUP.md](SETUP.md) を参照してください。なお、すべての環境で自動起動できることを保証していません。書く環境において適切に設定してください。
 
 ### コマンドラインオプション
 
@@ -163,12 +165,6 @@ CMや番組の完パケをサブディレクトリに分けることも可能で
 
 詳細なトラブルシューティングは [SETUP.md](SETUP.md) を参照してください。
 
-### 既知の問題
-
-**日替わり処理が正常に動作しない**
-
-放送運行のために読み込んだcsvのレコードが残り10件になった段階で、翌日分のcsvを自動的にロードする機能が、環境よって正常に動作せず、すべてのレコードを処理後にプログラムが停止することがあります。その際、再度プログラムを起動してください。（2026/3/9現在修正対応中）
-
 ### よくある問題
 
 **ファイルが見つからない**
@@ -187,6 +183,11 @@ systemctl --user status jackd
 # サービスの再起動
 systemctl --user restart jackd
 ```
+
+## 更新履歴
+ - 2026/01/12:初版公開
+ - 2026/02/03:ver.0.03　軽微な修正を実施
+ - 2026/03/12:ver.0.04　日替わり処理の不具合を修正、PiPeWireに対応
 
 ## ライセンス
 
