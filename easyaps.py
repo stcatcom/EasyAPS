@@ -64,8 +64,20 @@ class MusicScheduler:
         self.previous_studio_mode = None
         self.jack_connection_active = False
 
+        # ログファイルの初期化
+        self.log_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'process.log')
+        self.log_file = open(self.log_file_path, 'a', encoding='utf-8')
+        self._log(f"\n========== プログラム起動: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ==========")
+
         # device.conf からオーディオルーティング設定を読み込み
         self._load_device_config()
+
+    def _log(self, message):
+        """ログをファイルに記録（標準出力にも出力）"""
+        print(message)
+        if self.log_file:
+            self.log_file.write(message + '\n')
+            self.log_file.flush()
 
     def _load_device_config(self):
         """device.conf からオーディオルーティング設定を読み込む（なければデフォルト値を使用）"""
@@ -569,10 +581,11 @@ class MusicScheduler:
         next_day_csv_path = self.get_next_day_csv_path()
         broadcast_date = self.get_broadcast_date()
         next_day = broadcast_date + timedelta(days=1)
-        
-        print(f"\nバックグラウンドで翌日分CSVを読み込み中: {next_day_csv_path}")
+
+        self._log(f"\nバックグラウンドで翌日分CSVを読み込み中: {next_day_csv_path}")
+        self._log(f"DEBUG: バックグラウンド開始。next_day_loaded={self.next_day_loaded}, next_day_loading={self.next_day_loading}")
         next_day_records = self.load_csv_records(next_day_csv_path, next_day, is_background=True)
-        
+
         if next_day_records:
             # 時刻順にソートしてから追加
             next_day_records.sort(key=lambda x: x['time'])
@@ -582,14 +595,18 @@ class MusicScheduler:
         else:
             print("\n翌日分のCSVファイルが見つからないか、有効なレコードがありません")
             # ファイルが見つからない場合でもフラグは立てない（再試行のため）
-        
+
+        self._log(f"DEBUG: バックグラウンド完了。next_day_loaded={self.next_day_loaded}, next_day_loading→False に設定")
         self.next_day_loading = False
 
     def load_next_day_csv(self):
         """翌日のCSVファイルを読み込んで追加（バックグラウンド対応）"""
+        self._log(f"DEBUG: load_next_day_csv() 呼び出し。next_day_loaded={self.next_day_loaded}, next_day_loading={self.next_day_loading}")
         if self.next_day_loaded or self.next_day_loading:
+            self._log(f"DEBUG: 早期リターン。既に読み込み済みまたは読み込み中です")
             return
-        
+
+        self._log(f"DEBUG: バックグラウンドスレッド開始。next_day_loading→True に設定")
         self.next_day_loading = True
         
         # バックグラウンドスレッドで実行
@@ -830,14 +847,37 @@ class MusicScheduler:
             # 現在演奏中のファイルがある場合は再生開始
             if self.current_record:
                 self.start_current_playback()
-            
+
             # 時間表示スレッドを開始
             #self.start_display_thread()
-            
+
+            # 日替わり検出用に初期放送日を記録
+            last_broadcast_date = self.get_broadcast_date()
+
             # 残りのレコードを順次処理
             while True:
+                # 日替わりチェック
+                current_broadcast_date = self.get_broadcast_date()
+                if current_broadcast_date != last_broadcast_date:
+                    print(f"\n【日替わり処理】 {last_broadcast_date.strftime('%Y-%m-%d')} → {current_broadcast_date.strftime('%Y-%m-%d')}")
+                    # フラグをリセット（current_record_index はまだリセットしない）
+                    self.next_day_loaded = False
+                    self.next_day_loading = False
+                    self.next_day_check_started = False
+                    self._log(f"DEBUG: 日替わり処理実行。フラグをリセット。next_day_loaded={self.next_day_loaded}, next_day_loading={self.next_day_loading}, next_day_check_started={self.next_day_check_started}")
+                    last_broadcast_date = current_broadcast_date
+
                 if not self.wait_and_play_next():
-                    break
+                    # 当日分のレコードが終了した
+                    if self.next_day_loaded:
+                        # 翌日分が読み込まれている場合、翌日分の処理を開始
+                        print(f"\n翌日分レコードから再開します")
+                        self.current_record_index = 0  # ← 翌日分のレコード処理開始時にリセット
+                        self._log(f"DEBUG: 当日分終了。翌日分から再開。current_record_index=0 にリセット")
+                        continue  # メインループを継続
+                    else:
+                        # 翌日分が読み込まれていない場合、スケジュール終了
+                        break
                 
                 # 全レコード終了チェック（簡略化）
                 if self.current_record_index >= len(self.all_records) - 1:
@@ -870,6 +910,11 @@ class MusicScheduler:
         finally:
             # 時間表示スレッドを停止
             self.stop_display_thread()
+            # ログファイルを閉じる
+            if self.log_file:
+                self._log(f"========== プログラム終了: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ==========\n")
+                self.log_file.close()
+                self.log_file = None
 
 def main():
     # 日替わり時刻をコマンドライン引数で設定
