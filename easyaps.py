@@ -880,9 +880,9 @@ class MusicScheduler:
         if not self.display_running:
             self.start_display_thread()
         
-        # 待機（1秒刻みでチェック）
+        # 待機（0.25秒刻みでチェック）
         while wait_seconds > 0:
-            time.sleep(1)
+            time.sleep(0.25)
             current_time = datetime.now()
             wait_seconds = (scheduled_time - current_time).total_seconds()
         
