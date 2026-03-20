@@ -17,7 +17,7 @@ Organization: Office Stray Cat
 Website: https://stcat.com/
 Email: info@stcat.com
 GitHub: https://github.com/stcatcom/EasyAPS
-Version: 0.04
+Version: 0.10 (2026-03-20)
 """
 import configparser
 import csv
@@ -26,9 +26,121 @@ import subprocess
 import time
 import threading
 from datetime import datetime, timedelta
+import mpd
 
 # バージョン情報
-version = "free-0.04"
+version = "free-0.10"
+
+class MPDManager:
+    """MPD接続管理クラス"""
+    def __init__(self, host='localhost', port=6600):
+        self.host = host
+        self.port = port
+        self.client = None
+
+    def connect(self):
+        """MPDに接続"""
+        try:
+            if self.client is None:
+                self.client = mpd.MPDClient()
+                self.client.connect(self.host, self.port)
+                return True
+        except Exception as e:
+            print(f"MPD接続エラー: {e}")
+            self.client = None
+            return False
+
+    def disconnect(self):
+        """MPDから切断"""
+        try:
+            if self.client:
+                self.client.close()
+                self.client = None
+        except Exception as e:
+            print(f"MPD切断エラー: {e}")
+
+    def is_connected(self):
+        """接続状態を確認"""
+        if self.client is None:
+            return False
+        try:
+            self.client.ping()
+            return True
+        except Exception:
+            self.client = None
+            return False
+
+    def play_file(self, filepath):
+        """ファイルを再生（キューをクリアして追加）"""
+        if not self.is_connected():
+            if not self.connect():
+                return False
+        try:
+            # mpdのデータベースパスを相対パスに変換（~/easyaps/data/contents以下）
+            # mpdの設定で music_directory が ~/easyaps/data に指定されている場合
+            music_dir = os.path.expanduser("~/easyaps/data")
+            relative_path = os.path.relpath(filepath, music_dir)
+
+            self.client.clear()
+            self.client.add(relative_path)
+            self.client.play()
+            return True
+        except Exception as e:
+            print(f"MPD再生エラー: {e}")
+            return False
+
+    def play_file_from_position(self, filepath, start_position):
+        """指定位置から再生"""
+        if not self.play_file(filepath):
+            return False
+        try:
+            time.sleep(0.5)  # 再生開始待機
+            self.client.seek(0, int(start_position))
+            return True
+        except Exception as e:
+            print(f"MPDシーク失敗: {e}")
+            return False
+
+    def get_status(self):
+        """再生状態を取得"""
+        if not self.is_connected():
+            if not self.connect():
+                return "unknown"
+        try:
+            status = self.client.status()
+            state = status.get('state', 'unknown')
+            # MPDのステータス: play, pause, stop
+            if state == 'play':
+                return 'playing'
+            elif state == 'pause':
+                return 'paused'
+            else:
+                return 'stopped'
+        except Exception:
+            return "unknown"
+
+    def get_playback_position(self):
+        """現在の再生位置を取得（秒）"""
+        if not self.is_connected():
+            if not self.connect():
+                return None
+        try:
+            status = self.client.status()
+            elapsed = status.get('elapsed', '0')
+            return float(elapsed)
+        except Exception:
+            return None
+
+    def stop(self):
+        """再生を停止"""
+        if not self.is_connected():
+            return False
+        try:
+            self.client.stop()
+            return True
+        except Exception as e:
+            print(f"MPD停止エラー: {e}")
+            return False
 
 class MusicScheduler:
     def __init__(self, day_end_hour=4):
@@ -46,12 +158,15 @@ class MusicScheduler:
         self.current_start_time = None  # 現在の音源の実際の開始時刻
         self.display_running = False
         self.display_thread = None
-        
+
+        # MPD管理
+        self.mpd_manager = MPDManager()
+
         # 放送日の終了時刻（0-5時に変更）
         if not (0 <= day_end_hour <= 5):
             raise ValueError("day_end_hour は 0-5 の範囲で指定してください")
         self.day_end_hour = day_end_hour
-        
+
         # 日替わり処理用
         self.all_records = []  # 全レコード（現在日+翌日）
         self.current_record_index = 0  # 現在処理中のレコードインデックス
@@ -59,7 +174,7 @@ class MusicScheduler:
         self.next_day_loading = False  # 翌日分読み込み中フラグ
         self.preload_threshold = 10  # 残りレコード数がこの値以下になったら翌日分を読み込み
         self.next_day_check_started = False  # 翌日分チェック開始フラグ
-        
+
         # JACK制御の状態管理を追加
         self.previous_studio_mode = None
         self.jack_connection_active = False
@@ -141,18 +256,9 @@ class MusicScheduler:
         
         return broadcast_date
     
-    def get_audacious_playback_position(self):
-        """audaciousの現在の再生位置を取得（秒）"""
-        try:
-            result = subprocess.run(["audtool", "current-song-output-length-seconds"], 
-                                  capture_output=True, 
-                                  text=True, 
-                                  timeout=2)
-            if result.returncode == 0 and result.stdout.strip():
-                return float(result.stdout.strip())
-        except (subprocess.CalledProcessError, ValueError, subprocess.TimeoutExpired):
-            pass
-        return None
+    def get_mpd_playback_position(self):
+        """mpdの現在の再生位置を取得（秒）"""
+        return self.mpd_manager.get_playback_position()
     
     def check_jack_connections(self):
         """修正版：JACKの接続状態をチェック"""
@@ -262,16 +368,9 @@ class MusicScheduler:
         # 前回の状態を更新
         self.previous_studio_mode = current_studio_mode
     
-    def get_audacious_status(self):
-        """audaciousの再生状況を取得"""
-        try:
-            result = subprocess.run(["audtool", "playback-status"], 
-                                  capture_output=True, 
-                                  text=True, 
-                                  timeout=2)
-            return result.stdout.strip()
-        except Exception:
-            return "unknown"
+    def get_mpd_status(self):
+        """mpdの再生状況を取得"""
+        return self.mpd_manager.get_status()
     
     def display_status(self):
         """時間情報を連続表示するスレッド"""
@@ -289,25 +388,25 @@ class MusicScheduler:
                         status_line += "\033[41m\033[97m🎙 スタジオモード中\033[0m"
                     else:
                         # 通常モードの場合のみ演奏位置を表示
-                        # audaciousの再生状態と位置を取得
-                        audacious_status = self.get_audacious_status()
-                        audacious_position = self.get_audacious_playback_position()
-                        
+                        # mpdの再生状態と位置を取得
+                        mpd_status = self.get_mpd_status()
+                        mpd_position = self.get_mpd_playback_position()
+
                         # 状態インジケーター
-                        status_indicator = "♪" if audacious_status == "playing" else "⏸" if audacious_status == "paused" else "○"
-                        
+                        status_indicator = "♪" if mpd_status == "playing" else "⏸" if mpd_status == "paused" else "○"
+
                         # 演奏位置の計算
-                        if audacious_position is not None and audacious_status == "playing":
-                            # audtoolから取得した実際の再生位置を使用
+                        if mpd_position is not None and mpd_status == "playing":
+                            # mpdから取得した実際の再生位置を使用
                             scheduled_start = self.current_record['time']
-                            
+
                             # 元の開始予定時刻からのオフセットを計算
                             start_offset = (self.current_start_time - scheduled_start).total_seconds()
                             if start_offset > 0:
                                 # 遅延開始の場合は、その分を加算
-                                total_position = audacious_position + start_offset
+                                total_position = mpd_position + start_offset
                             else:
-                                total_position = audacious_position
+                                total_position = mpd_position
                             
                             status_line += f"{status_indicator} 演奏位置: {self.format_time_display(total_position)}"
                         else:
@@ -404,54 +503,48 @@ class MusicScheduler:
         return self.dummy_file
     
     def play_audio_file(self, filepath, start_position=None):
-        """audaciousでオーディオファイルを再生（SLT・空欄・ST対応）"""
+        """mpdでオーディオファイルを再生（SLT・空欄・ST対応）"""
         # SLTまたは空欄の場合は無音処理
-        if (filepath == 'SILENCE' or 
-            os.path.basename(filepath).upper().startswith('SLT') or 
-            os.path.basename(filepath).strip() == '' or 
+        if (filepath == 'SILENCE' or
+            os.path.basename(filepath).upper().startswith('SLT') or
+            os.path.basename(filepath).strip() == '' or
             filepath.strip() == ''):
             if start_position is not None:
                 print(f"\n無音開始: (位置: {start_position:.1f}秒から)")
             else:
                 print(f"\n無音開始:")
+            # mpdを停止
+            self.mpd_manager.stop()
             return
-        
+
         # STの場合はスタジオモード処理
-        if (filepath == 'STUDIO' or 
+        if (filepath == 'STUDIO' or
             os.path.basename(filepath).upper() == 'ST'):
             if start_position is not None:
                 print(f"\nスタジオモード開始: (位置: {start_position:.1f}秒から)")
             else:
                 print(f"\nスタジオモード開始:")
+            # mpdを停止
+            self.mpd_manager.stop()
             return
-        
+
         # ダミーファイルの場合で、ファイルが存在しない場合は無音処理
         if filepath == self.dummy_file and not os.path.exists(filepath):
             print(f"\nダミーファイルが見つかりません: {filepath}")
             print("無音で継続します")
+            self.mpd_manager.stop()
             return
-        
+
         try:
             if start_position is not None:
                 # 指定された位置から再生開始
-                # audaciousでは直接位置指定ができないため、別の方法を使用
-                # まず通常再生を開始してからシークコマンドを実行
-                subprocess.Popen(["audacious", filepath])
-                # 少し待ってからシークコマンドを実行
-                time.sleep(1)
-                # audtoolを使用して指定位置にシーク
-                try:
-                    subprocess.run(["audtool", "playback-seek", str(start_position)], check=True)
-                    print(f"\n再生開始: {filepath} (位置: {start_position:.1f}秒)")
-                except (subprocess.CalledProcessError, FileNotFoundError):
-                    print(f"\nシーク失敗。通常再生: {filepath}")
+                self.mpd_manager.play_file_from_position(filepath, start_position)
+                print(f"\n再生開始: {filepath} (位置: {start_position:.1f}秒)")
             else:
-                subprocess.run(["audacious", filepath], check=True)
+                self.mpd_manager.play_file(filepath)
                 print(f"\n再生開始: {filepath}")
-        except subprocess.CalledProcessError as e:
+        except Exception as e:
             print(f"\n再生エラー: {e}")
-        except FileNotFoundError:
-            print("\naudaciousが見つかりません。インストールされているか確認してください。")
     
     def parse_time_for_date(self, time_str, base_date):
         """指定された基準日に対して時刻文字列を解析"""
@@ -825,7 +918,11 @@ class MusicScheduler:
     def run(self):
         """メインの実行ループ"""
         print("放送スケジューラーを開始します...")
-        
+
+        # MPDに接続
+        if not self.mpd_manager.connect():
+            print("警告: MPDに接続できません。再生機能が利用できません。")
+
         try:
             # CSVファイルを読み込み
             records = self.load_and_process_csv()
@@ -910,6 +1007,8 @@ class MusicScheduler:
         finally:
             # 時間表示スレッドを停止
             self.stop_display_thread()
+            # MPD接続を切断
+            self.mpd_manager.disconnect()
             # ログファイルを閉じる
             if self.log_file:
                 self._log(f"========== プログラム終了: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ==========\n")
