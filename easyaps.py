@@ -9,7 +9,7 @@ All rights reserved.
 Licensed under the MIT License
 See LICENSE file for more details.
 
-NOTICE: This copyright notice must be retained in all copies or 
+NOTICE: This copyright notice must be retained in all copies or
 substantial portions of the software, including derivative works.
 
 Author: Masaya Miyazaki
@@ -17,7 +17,7 @@ Organization: Office Stray Cat
 Website: https://stcat.com/
 Email: info@stcat.com
 GitHub: https://github.com/stcatcom/EasyAPS
-Version: 0.10 (2026-03-20)
+Version: 0.11 (2026-03-21)
 """
 import configparser
 import csv
@@ -26,127 +26,85 @@ import subprocess
 import time
 import threading
 from datetime import datetime, timedelta
-import mpd
 
 # バージョン情報
-version = "free-0.10"
+version = "free-0.11"
 
-class MPDManager:
-    """MPD接続管理クラス"""
-    def __init__(self, host='localhost', port=6600):
-        self.host = host
-        self.port = port
-        self.client = None
+class mpvPlayer:
+    """mpvプレイヤー管理クラス"""
+    def __init__(self, mpv_path='/usr/bin/mpv', debug_mode=False):
+        self.mpv_path = mpv_path
+        self.mpv_process = None
+        self.debug_mode = debug_mode
 
-    def connect(self):
-        """MPDに接続"""
+    def play_file(self, filepath, start_position=0):
+        """ファイルを再生（シーク付き）"""
+        self.stop()  # 前回の再生を停止
+
+        start_time = time.time()
+
+        cmd = [
+            self.mpv_path,
+            "--no-video",          # 動画表示なし
+            "--no-terminal",       # ターミナル出力なし
+            "--really-quiet",      # 静かに実行
+            "--keep-open=no",      # 再生終了後に自動終了
+            "--ao=jack",           # JACK オーディオ出力
+        ]
+
+        if start_position > 0:
+            cmd.append(f"--start={int(start_position)}")
+            if self.debug_mode:
+                print(f"[mpv実行] シーク位置: {int(start_position)}秒")
+
+        cmd.append(filepath)
+
         try:
-            if self.client is None:
-                self.client = mpd.MPDClient()
-                self.client.connect(self.host, self.port)
-                return True
-        except Exception as e:
-            print(f"MPD接続エラー: {e}")
-            self.client = None
-            return False
-
-    def disconnect(self):
-        """MPDから切断"""
-        try:
-            if self.client:
-                self.client.close()
-                self.client = None
-        except Exception as e:
-            print(f"MPD切断エラー: {e}")
-
-    def is_connected(self):
-        """接続状態を確認"""
-        if self.client is None:
-            return False
-        try:
-            self.client.ping()
-            return True
-        except Exception:
-            self.client = None
-            return False
-
-    def play_file(self, filepath):
-        """ファイルを再生（キューをクリアして追加）"""
-        if not self.is_connected():
-            if not self.connect():
-                return False
-        try:
-            # mpdのデータベースパスを相対パスに変換（~/easyaps/data/contents以下）
-            # mpdの設定で music_directory が ~/easyaps/data に指定されている場合
-            music_dir = os.path.expanduser("~/easyaps/data")
-            relative_path = os.path.relpath(filepath, music_dir)
-
-            self.client.clear()
-            self.client.add(relative_path)
-            self.client.play()
+            self.mpv_process = subprocess.Popen(cmd,
+                                               stdout=subprocess.DEVNULL,
+                                               stderr=subprocess.DEVNULL,
+                                               start_new_session=True)
+            exec_time = time.time() - start_time
+            if self.debug_mode:
+                print(f"[mpv実行時間] {exec_time:.3f}s")
             return True
         except Exception as e:
-            print(f"MPD再生エラー: {e}")
+            print(f"mpv再生エラー: {e}")
             return False
 
     def play_file_from_position(self, filepath, start_position):
         """指定位置から再生"""
-        if not self.play_file(filepath):
-            return False
-        try:
-            time.sleep(0.5)  # 再生開始待機
-            self.client.seek(0, int(start_position))
-            return True
-        except Exception as e:
-            print(f"MPDシーク失敗: {e}")
-            return False
-
-    def get_status(self):
-        """再生状態を取得"""
-        if not self.is_connected():
-            if not self.connect():
-                return "unknown"
-        try:
-            status = self.client.status()
-            state = status.get('state', 'unknown')
-            # MPDのステータス: play, pause, stop
-            if state == 'play':
-                return 'playing'
-            elif state == 'pause':
-                return 'paused'
-            else:
-                return 'stopped'
-        except Exception:
-            return "unknown"
-
-    def get_playback_position(self):
-        """現在の再生位置を取得（秒）"""
-        if not self.is_connected():
-            if not self.connect():
-                return None
-        try:
-            status = self.client.status()
-            elapsed = status.get('elapsed', '0')
-            return float(elapsed)
-        except Exception:
-            return None
+        return self.play_file(filepath, start_position)
 
     def stop(self):
         """再生を停止"""
-        if not self.is_connected():
-            return False
         try:
-            self.client.stop()
-            return True
+            if self.mpv_process is not None and self.mpv_process.poll() is None:
+                self.mpv_process.terminate()
+                try:
+                    self.mpv_process.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    self.mpv_process.kill()
+                self.mpv_process = None
+                return True
         except Exception as e:
-            print(f"MPD停止エラー: {e}")
-            return False
+            print(f"mpv停止エラー: {e}")
+        return False
+
+    def is_playing(self):
+        """再生中かどうかを確認"""
+        return self.mpv_process is not None and self.mpv_process.poll() is None
+
+    def disconnect(self):
+        """クリーンアップ（停止）"""
+        self.stop()
 
 class MusicScheduler:
-    def __init__(self, day_end_hour=4):
+    def __init__(self, day_end_hour=4, debug_mode=False):
         """
         day_end_hour: 放送日の終了時刻（1-5時で指定、デフォルト4時）
         例：4時設定の場合、3:59:59までが当日、4:00:00が翌日開始
+        debug_mode: Trueの場合、デバッグログを画面に表示
         """
         home_dir = os.path.expanduser("~")
         self.base_dir = os.path.join(home_dir, "easyaps")
@@ -158,9 +116,10 @@ class MusicScheduler:
         self.current_start_time = None  # 現在の音源の実際の開始時刻
         self.display_running = False
         self.display_thread = None
+        self.debug_mode = debug_mode  # デバッグモードフラグ
 
-        # MPD管理
-        self.mpd_manager = MPDManager()
+        # mpvプレイヤー管理
+        self.player = mpvPlayer(mpv_path='/usr/bin/mpv', debug_mode=debug_mode)
 
         # 放送日の終了時刻（0-5時に変更）
         if not (0 <= day_end_hour <= 5):
@@ -186,6 +145,24 @@ class MusicScheduler:
 
         # device.conf からオーディオルーティング設定を読み込み
         self._load_device_config()
+
+        # 前回実行時の残存 mpv プロセスを停止
+        self._cleanup_previous_mpv()
+
+    def _cleanup_previous_mpv(self):
+        """前回実行時に残された mpv プロセスを停止"""
+        try:
+            result = subprocess.run(["pgrep", "-f", "mpv"],
+                                  capture_output=True,
+                                  text=True)
+            if result.stdout.strip():
+                # mpv プロセスが存在する場合は停止
+                subprocess.run(["pkill", "-f", "mpv"],
+                             capture_output=True)
+                print("前回実行時の mpv プロセスを停止しました")
+        except Exception:
+            # pgrep/pkill コマンドが利用できない場合はスキップ
+            pass
 
     def _log(self, message):
         """ログをファイルに記録（標準出力にも出力）"""
@@ -255,10 +232,6 @@ class MusicScheduler:
             broadcast_date = target_time.date()
         
         return broadcast_date
-    
-    def get_mpd_playback_position(self):
-        """mpdの現在の再生位置を取得（秒）"""
-        return self.mpd_manager.get_playback_position()
     
     def check_jack_connections(self):
         """修正版：JACKの接続状態をチェック"""
@@ -368,71 +341,46 @@ class MusicScheduler:
         # 前回の状態を更新
         self.previous_studio_mode = current_studio_mode
     
-    def get_mpd_status(self):
-        """mpdの再生状況を取得"""
-        return self.mpd_manager.get_status()
-    
     def display_status(self):
         """時間情報を連続表示するスレッド"""
         while self.display_running:
             try:
                 current_time = datetime.now()
-                status_line = ""
-                
-                # 現在演奏中の位置表示
-                if self.current_record and self.current_start_time:
-                    # STモードの場合は演奏位置を表示しない
-                    if self.is_studio_mode(self.current_record):
-                        # STモードの場合は「スタジオモード中」と表示
-                        #status_line += "🎙 スタジオモード中"
-                        status_line += "\033[41m\033[97m🎙 スタジオモード中\033[0m"
-                    else:
-                        # 通常モードの場合のみ演奏位置を表示
-                        # mpdの再生状態と位置を取得
-                        mpd_status = self.get_mpd_status()
-                        mpd_position = self.get_mpd_playback_position()
+                time_str = current_time.strftime('%H:%M:%S')
 
-                        # 状態インジケーター
-                        status_indicator = "♪" if mpd_status == "playing" else "⏸" if mpd_status == "paused" else "○"
-
-                        # 演奏位置の計算
-                        if mpd_position is not None and mpd_status == "playing":
-                            # mpdから取得した実際の再生位置を使用
-                            scheduled_start = self.current_record['time']
-
-                            # 元の開始予定時刻からのオフセットを計算
-                            start_offset = (self.current_start_time - scheduled_start).total_seconds()
-                            if start_offset > 0:
-                                # 遅延開始の場合は、その分を加算
-                                total_position = mpd_position + start_offset
-                            else:
-                                total_position = mpd_position
-                            
-                            status_line += f"{status_indicator} 演奏位置: {self.format_time_display(total_position)}"
-                        else:
-                            # audtoolが使えない場合の処理
-                            if not (self.current_record['filename'].upper() == 'SLT' or self.current_record['filename'].strip() == ''):
-                                # SLTや空欄でない場合のみ推定位置を表示
-                                scheduled_start = self.current_record['time']
-                                total_elapsed = (current_time - scheduled_start).total_seconds()
-                                status_line += f"? 推定位置: {self.format_time_display(total_elapsed)}"
-                
-                # 次の再生までの時間表示
+                # 次のイベントまでの残り時間を計算
                 if self.next_record:
                     next_start = self.next_record['time']
-                    wait_seconds = (next_start - current_time).total_seconds()
-                    
-                    if wait_seconds > 0:
-                        if status_line:
-                            status_line += " | "
-                        status_line += f"次の再生まで: {self.format_time_display(wait_seconds)}"
-                
-                # 同一行に上書き表示
-                if status_line:
-                    print(f"\r{status_line}                      ", end="", flush=True)
-                
+                    remain_seconds = (next_start - current_time).total_seconds()
+
+                    if remain_seconds > 0:
+                        remain_h = int(remain_seconds // 3600)
+                        remain_m = int((remain_seconds % 3600) // 60)
+                        remain_s = int(remain_seconds % 60)
+                        remain_str = f"{remain_h:02d}:{remain_m:02d}:{remain_s:02d}"
+                    else:
+                        remain_str = "00:00:00"
+                else:
+                    remain_str = "--:--:--"
+
+                # 現在のレコード情報を表示
+                if self.current_record:
+                    if self.is_studio_mode(self.current_record):
+                        # スタジオモード中（赤字に白文字）
+                        label = "\033[41m\033[97m生放送中\033[0m"
+                    else:
+                        # ファイル名を表示（緑色）
+                        filename = self.current_record.get('filename', '？')
+                        label = f"\033[92m{filename}\033[0m"
+                    status_line = f"[{label}] {time_str} {remain_str}"
+                else:
+                    status_line = f"[待機中] {time_str} {remain_str}"
+
+                # 一行で上書き表示
+                print(f"\r{status_line}", end="", flush=True)
+
                 time.sleep(1)  # 1秒ごとに更新
-                
+
             except Exception as e:
                 # エラーが発生してもスレッドを継続
                 time.sleep(1)
@@ -503,7 +451,10 @@ class MusicScheduler:
         return self.dummy_file
     
     def play_audio_file(self, filepath, start_position=None):
-        """mpdでオーディオファイルを再生（SLT・空欄・ST対応）"""
+        """mpvでオーディオファイルを再生（SLT・空欄・ST対応）"""
+        import time
+        audio_start_time = time.time()
+
         # SLTまたは空欄の場合は無音処理
         if (filepath == 'SILENCE' or
             os.path.basename(filepath).upper().startswith('SLT') or
@@ -513,8 +464,8 @@ class MusicScheduler:
                 print(f"\n無音開始: (位置: {start_position:.1f}秒から)")
             else:
                 print(f"\n無音開始:")
-            # mpdを停止
-            self.mpd_manager.stop()
+            # mpvを停止
+            self.player.stop()
             return
 
         # STの場合はスタジオモード処理
@@ -524,27 +475,35 @@ class MusicScheduler:
                 print(f"\nスタジオモード開始: (位置: {start_position:.1f}秒から)")
             else:
                 print(f"\nスタジオモード開始:")
-            # mpdを停止
-            self.mpd_manager.stop()
+            # mpvを停止
+            self.player.stop()
             return
 
         # ダミーファイルの場合で、ファイルが存在しない場合は無音処理
         if filepath == self.dummy_file and not os.path.exists(filepath):
             print(f"\nダミーファイルが見つかりません: {filepath}")
             print("無音で継続します")
-            self.mpd_manager.stop()
+            self.player.stop()
             return
 
         try:
+            playback_start = time.time()
             if start_position is not None:
                 # 指定された位置から再生開始
-                self.mpd_manager.play_file_from_position(filepath, start_position)
-                print(f"\n再生開始: {filepath} (位置: {start_position:.1f}秒)")
+                self.player.play_file_from_position(filepath, start_position)
+                self._log(f"\n再生開始: {filepath} (位置: {start_position:.1f}秒)")
             else:
-                self.mpd_manager.play_file(filepath)
-                print(f"\n再生開始: {filepath}")
+                self.player.play_file(filepath)
+                self._log(f"\n再生開始: {filepath}")
+            mpv_elapsed = time.time() - playback_start
+            if self.debug_mode:
+                self._log(f"[mpv実行時間] {mpv_elapsed:.3f}s")
         except Exception as e:
-            print(f"\n再生エラー: {e}")
+            self._log(f"\n再生エラー: {e}")
+        finally:
+            audio_elapsed = time.time() - audio_start_time
+            if self.debug_mode:
+                self._log(f"[再生処理時間] 合計: {audio_elapsed:.3f}s")
     
     def parse_time_for_date(self, time_str, base_date):
         """指定された基準日に対して時刻文字列を解析"""
@@ -783,21 +742,24 @@ class MusicScheduler:
             filename = self.current_record['filename']
             filepath = self.find_media_file(filename)
             self.current_record['filepath'] = filepath
-            
-            # JACK接続モード変更を処理（統一メソッド使用）
-            self.handle_jack_mode_change(self.current_record)
-            
+
+            # JACK接続モード変更を処理（モード変更時のみ実行）
+            current_studio_mode = self.is_studio_mode(self.current_record)
+            if current_studio_mode != self.previous_studio_mode:
+                self.handle_jack_mode_change(self.current_record)
+                self.previous_studio_mode = current_studio_mode
+
             # 翌日分CSVのチェック（レコード演奏時）
             self.check_next_day_csv_availability()
-            
+
             # 現在時刻と開始予定時刻の差を計算
             current_time = datetime.now()
             scheduled_time = self.current_record['time']
             elapsed_seconds = (current_time - scheduled_time).total_seconds()
-            
+
             # 実際の再生開始時刻を記録
             self.current_start_time = current_time
-            
+
             print()  # 改行してから情報表示
             if elapsed_seconds > 0:
                 # 開始時刻を過ぎている場合、その分をスキップして再生
@@ -896,20 +858,23 @@ class MusicScheduler:
             filename = self.next_record['filename']
             filepath = self.find_media_file(filename)
             self.next_record['filepath'] = filepath
-            
-            # JACK接続モード変更を処理（統一メソッド使用）
-            self.handle_jack_mode_change(self.next_record)
-            
+
+            # JACK接続モード変更を処理（モード変更時のみ実行）
+            current_studio_mode = self.is_studio_mode(self.next_record)
+            if current_studio_mode != self.previous_studio_mode:
+                self.handle_jack_mode_change(self.next_record)
+                self.previous_studio_mode = current_studio_mode
+
             # 翌日分CSVのチェック（レコード演奏時）
             self.check_next_day_csv_availability()
-            
+
             # 実際の再生開始時刻を記録
             self.current_start_time = datetime.now()
-            
+
             print()  # 改行してから情報表示
             print(f"再生開始: {self.format_broadcast_time(self.next_record['time'])} - {filename}")
             self.play_audio_file(filepath)  # 次のレコードは時刻通りなので位置指定なし
-            
+
             # CurrentRecordとインデックスを更新
             self.current_record = self.next_record
             self.current_record_index = next_index
@@ -917,11 +882,7 @@ class MusicScheduler:
     
     def run(self):
         """メインの実行ループ"""
-        print("放送スケジューラーを開始します...")
-
-        # MPDに接続
-        if not self.mpd_manager.connect():
-            print("警告: MPDに接続できません。再生機能が利用できません。")
+        print("放送スケジューラーを開開始します...")
 
         try:
             # CSVファイルを読み込み
@@ -1007,44 +968,56 @@ class MusicScheduler:
         finally:
             # 時間表示スレッドを停止
             self.stop_display_thread()
-            # MPD接続を切断
-            self.mpd_manager.disconnect()
             # ログファイルを閉じる
             if self.log_file:
                 self._log(f"========== プログラム終了: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ==========\n")
                 self.log_file.close()
                 self.log_file = None
 
+            # mpv再生とJACK接続を保持したまま終了
+            print("\nスクリプトを停止しました。mpv再生とJACK接続は保持されています。")
+
 def main():
     # 日替わり時刻をコマンドライン引数で設定
     import sys
-    
+
     day_end_hour = 4  # デフォルト値（午前4時）
-    
+    debug_mode = False  # デバッグモード（デフォルト：無効）
+
     # バージョン表示
     if len(sys.argv) > 1 and sys.argv[1] in ['-v', '--version']:
         print(f"EasyAPS version {version}")
         return
-    
+
     # 使用方法の表示
     if len(sys.argv) > 1 and sys.argv[1] in ['-h', '--help']:
         print("使用方法: python3 easyaps.py [オプション] [日替わり時刻]")
         print("オプション:")
         print("  -v, --version    バージョン情報を表示")
         print("  -h, --help       この使用方法を表示")
+        print("  --debug          デバッグモード（MPD実行時間などを画面に表示）")
         print()
         print("日替わり時刻: 0-5の数字で指定（午前0時〜5時）")
         print("例:")
-        print("  python3 easyaps.py     # 午前4時で日替わり（デフォルト）")
-        print("  python3 easyaps.py 3   # 午前3時で日替わり")
-        print("  python3 easyaps.py 5   # 午前5時で日替わり")
-        print("  python3 easyaps.py -v  # バージョン表示")
+        print("  python3 easyaps.py          # 午前4時で日替わり（デフォルト）")
+        print("  python3 easyaps.py 3        # 午前3時で日替わり")
+        print("  python3 easyaps.py --debug  # デバッグモードで起動")
+        print("  python3 easyaps.py --debug 3 # デバッグモード + 午前3時で日替わり")
+        print("  python3 easyaps.py -v       # バージョン表示")
         return
-    
-    # コマンドライン引数で日替わり時刻を指定
-    if len(sys.argv) > 1:
+
+    # コマンドライン引数を解析
+    args = sys.argv[1:]
+
+    # --debugオプションをチェック
+    if '--debug' in args:
+        debug_mode = True
+        args.remove('--debug')
+
+    # 残りの引数で日替わり時刻を指定
+    if len(args) > 0:
         try:
-            day_end_hour = int(sys.argv[1])
+            day_end_hour = int(args[0])
             if not (0 <= day_end_hour <= 5):
                 print("エラー: 日替わり時刻は0-5の範囲で指定してください")
                 print("0=午前0時, 1=午前1時, 2=午前2時, 3=午前3時, 4=午前4時, 5=午前5時")
@@ -1055,9 +1028,11 @@ def main():
             return
     
     print(f"放送スケジューラー - 日替わり時刻: 午前{day_end_hour}時 (version {version})")
+    if debug_mode:
+        print("[デバッグモード有効]")
     print("=" * 50)
-    
-    scheduler = MusicScheduler(day_end_hour=day_end_hour)
+
+    scheduler = MusicScheduler(day_end_hour=day_end_hour, debug_mode=debug_mode)
     try:
         scheduler.run()
     except KeyboardInterrupt:
