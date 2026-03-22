@@ -123,13 +123,7 @@ mpv --ao=help | grep jack
 
 `[ao jack]` と表示されればJACK出力が利用可能です。
 
-### 3. データディレクトリの準備
-```bash
-# EasyAPS用データディレクトリを作成
-mkdir -p ~/easyaps/data/{csv,contents}
-```
-
-## Samba共有の設定(オプション)
+### 3. Samba共有の設定
 
 ネットワーク経由でCSVやメディアファイルを管理できるようにします。
 
