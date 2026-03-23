@@ -50,6 +50,8 @@ class mpvPlayer:
             "--really-quiet",      # 静かに実行
             "--keep-open=no",      # 再生終了後に自動終了
             "--ao=jack",           # JACK オーディオ出力
+            "--af=loudnorm=I=-18:TP=-2.0:LRA=11",
+
         ]
 
         if start_position > 0:
@@ -345,6 +347,7 @@ class MusicScheduler:
         """時間情報を連続表示するスレッド"""
         while self.display_running:
             try:
+                time.sleep(0.1)  # 0.1秒ごとに更新
                 current_time = datetime.now()
                 time_str = current_time.strftime('%H:%M:%S')
 
@@ -379,11 +382,9 @@ class MusicScheduler:
                 # 一行で上書き表示
                 print(f"\r{status_line}", end="", flush=True)
 
-                time.sleep(1)  # 1秒ごとに更新
-
             except Exception as e:
                 # エラーが発生してもスレッドを継続
-                time.sleep(1)
+                time.sleep(0.1)
     
     def start_display_thread(self):
         """時間表示スレッドを開始"""
@@ -842,9 +843,9 @@ class MusicScheduler:
         if not self.display_running:
             self.start_display_thread()
         
-        # 待機（0.25秒刻みでチェック）
+        # 待機（0.1秒刻みでチェック）
         while wait_seconds > 0:
-            time.sleep(0.25)
+            time.sleep(0.1)
             current_time = datetime.now()
             wait_seconds = (scheduled_time - current_time).total_seconds()
         
@@ -997,7 +998,7 @@ def main():
         print("  -h, --help       この使用方法を表示")
         print("  --debug          デバッグモード（MPD実行時間などを画面に表示）")
         print()
-        print("日替わり時刻: 0-5の数字で指定（午前0時〜5時）")
+        print("日替わり時刻: 0-5の数字で指定（午前0時?5時）")
         print("例:")
         print("  python3 easyaps.py          # 午前4時で日替わり（デフォルト）")
         print("  python3 easyaps.py 3        # 午前3時で日替わり")
