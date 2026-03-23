@@ -998,7 +998,7 @@ def main():
         print("  -h, --help       この使用方法を表示")
         print("  --debug          デバッグモード（MPD実行時間などを画面に表示）")
         print()
-        print("日替わり時刻: 0-5の数字で指定（午前0時?5時）")
+        print("日替わり時刻: 0-5の数字で指定（午前0時～5時）")
         print("例:")
         print("  python3 easyaps.py          # 午前4時で日替わり（デフォルト）")
         print("  python3 easyaps.py 3        # 午前3時で日替わり")
